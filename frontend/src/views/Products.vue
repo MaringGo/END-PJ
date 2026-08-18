@@ -4,12 +4,12 @@
       
       <!-- Header & Search -->
       <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <h1 class="text-4xl font-extrabold text-base-content tracking-tight">Our Menu</h1>
+        <h1 class="text-4xl font-extrabold text-base-content tracking-tight">เมนูอาหาร</h1>
         <div class="form-control w-full md:w-auto">
           <div class="input-group">
             <input 
               type="text" 
-              placeholder="Search dishes..." 
+              placeholder="ค้นหาเมนูอาหาร..." 
               class="input input-bordered w-full md:w-80 shadow-sm focus:border-primary transition-colors"
               v-model="searchQuery"
             />
@@ -24,7 +24,7 @@
           class="btn btn-sm sm:btn-md rounded-full transition-all duration-300"
           :class="selectedCategory === null ? 'btn-primary shadow-md' : 'btn-ghost bg-base-100 hover:bg-base-300'"
         >
-          All
+          ทั้งหมด
         </button>
         <button 
           v-for="category in categories" 
@@ -46,15 +46,15 @@
       <div v-else-if="error" class="alert alert-error shadow-lg">
         <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         <span>{{ error }}</span>
-        <button class="btn btn-sm" @click="fetchProducts">Retry</button>
+        <button class="btn btn-sm" @click="fetchProducts">ลองอีกครั้ง</button>
       </div>
 
       <!-- Empty State -->
       <div v-else-if="filteredProducts.length === 0" class="text-center py-20">
         <div class="text-6xl mb-4">🍽️</div>
-        <h3 class="text-2xl font-semibold text-base-content/70">No dishes found</h3>
-        <p class="text-base-content/50 mt-2">Try adjusting your search or category filter.</p>
-        <button class="btn btn-outline mt-6" @click="clearFilters">Clear Filters</button>
+        <h3 class="text-2xl font-semibold text-base-content/70">ไม่พบรายการอาหาร</h3>
+        <p class="text-base-content/50 mt-2">ลองพิมพ์ค้นหาด้วยคำอื่นหรือเปลี่ยนหมวดหมู่ตัวเลือก</p>
+        <button class="btn btn-outline mt-6" @click="clearFilters">ล้างตัวกรอง</button>
       </div>
 
       <!-- Products Grid -->
@@ -71,7 +71,7 @@
             </div>
             <!-- Category Badge -->
             <div class="absolute top-2 right-2 badge badge-neutral shadow-sm opacity-90">
-              {{ product.category || 'General' }}
+              {{ product.category || 'ทั่วไป' }}
             </div>
           </figure>
           
@@ -80,13 +80,13 @@
               {{ product.name }}
             </h2>
             <p class="text-sm text-base-content/70 line-clamp-2 mt-1 min-h-[40px]">
-              {{ product.description || 'A delicious dish prepared with fresh ingredients.' }}
+              {{ product.description || 'รายการอาหารอร่อย ปรุงสดใหม่จากวัตถุดิบคุณภาพดี' }}
             </p>
             
             <div class="flex items-center justify-between mt-4">
               <span class="text-xl font-extrabold text-primary">฿{{ Number(product.price).toFixed(2) }}</span>
-              <span v-if="product.stock <= 5 && product.stock > 0" class="text-xs text-warning font-semibold">Only {{product.stock}} left!</span>
-              <span v-else-if="product.stock <= 0" class="text-xs text-error font-semibold">Sold Out</span>
+              <span v-if="product.stock <= 5 && product.stock > 0" class="text-xs text-warning font-semibold">เหลือเพียง {{product.stock}} จานสุดท้าย!</span>
+              <span v-else-if="product.stock <= 0" class="text-xs text-error font-semibold">สินค้าหมด</span>
             </div>
 
             <div class="card-actions justify-end mt-4">
@@ -98,7 +98,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                Add to Cart
+                เพิ่มลงตะกร้า
               </button>
             </div>
           </div>
@@ -109,7 +109,7 @@
     <!-- Toast Notification (simulated simple one) -->
     <div class="toast toast-bottom toast-end z-50" v-if="showToast">
       <div class="alert alert-success shadow-lg">
-        <span>Added to cart successfully.</span>
+        <span>เพิ่มรายการลงในตะกร้าสำเร็จ</span>
       </div>
     </div>
   </div>
@@ -151,7 +151,7 @@ const fetchProducts = async () => {
     
   } catch (err) {
     console.error('Failed to fetch products:', err);
-    error.value = 'Failed to load menu. Please try again later.';
+    error.value = 'ไม่สามารถโหลดข้อมูลเมนูได้ กรุณาลองใหม่อีกครั้ง';
   } finally {
     loading.value = false;
   }

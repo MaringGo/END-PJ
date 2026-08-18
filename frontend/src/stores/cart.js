@@ -38,8 +38,13 @@ export const useCartStore = defineStore('cart', {
     },
     loadFromStorage() {
       const savedCart = localStorage.getItem('cart');
-      if (savedCart) {
-        this.items = JSON.parse(savedCart);
+      if (savedCart && savedCart !== 'undefined') {
+        try {
+          this.items = JSON.parse(savedCart);
+        } catch (e) {
+          console.error('Failed to parse cart from localStorage', e);
+          this.items = [];
+        }
       }
     },
     saveToStorage() {

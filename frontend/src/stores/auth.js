@@ -1,9 +1,18 @@
 import { defineStore } from 'pinia';
 import api from '../api/axios';
 
+const getSafeJSON = (key) => {
+  try {
+    const val = localStorage.getItem(key);
+    return val && val !== 'undefined' ? JSON.parse(val) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    user: JSON.parse(localStorage.getItem('user')) || null,
+    user: getSafeJSON('user'),
     token: localStorage.getItem('token') || null,
   }),
   getters: {

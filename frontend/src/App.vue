@@ -4,7 +4,7 @@
     <div class="navbar bg-base-100 shadow-sm sticky top-0 z-50 px-4 lg:px-8">
       <div class="flex-1">
         <router-link to="/" class="btn btn-ghost text-xl font-bold text-primary">
-          🍽️ <span class="hidden sm:inline">Restaurant</span>
+          🍽️ <span class="hidden sm:inline">ร้านอาหาร</span>
         </router-link>
       </div>
       <div class="flex-none gap-2">
@@ -19,10 +19,10 @@
             </div>
             <div tabindex="0" class="mt-3 z-[1] card card-compact dropdown-content w-52 bg-base-100 shadow-xl">
               <div class="card-body">
-                <span class="font-bold text-lg">{{ cartStore.itemCount }} Items</span>
-                <span class="text-info">Subtotal: ฿{{ cartStore.totalPrice.toFixed(2) }}</span>
+                <span class="font-bold text-lg">{{ cartStore.itemCount }} รายการ</span>
+                <span class="text-info">รวม: ฿{{ cartStore.totalPrice.toFixed(2) }}</span>
                 <div class="card-actions">
-                  <router-link to="/cart" class="btn btn-primary btn-block">View cart</router-link>
+                  <router-link to="/cart" class="btn btn-primary btn-block">ดูตะกร้าสินค้า</router-link>
                 </div>
               </div>
             </div>
@@ -37,17 +37,17 @@
             </div>
             <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
               <li class="menu-title">
-                <span>{{ authStore.user?.username }} ({{ authStore.user?.role }})</span>
+                <span>{{ authStore.user?.username }} ({{ translateRole(authStore.user?.role) }})</span>
               </li>
-              <li><router-link to="/orders">My Orders</router-link></li>
-              <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/dashboard">Dashboard</router-link></li>
-              <li><a @click="handleLogout" class="text-error">Logout</a></li>
+              <li><router-link to="/orders">ประวัติการสั่งซื้อ</router-link></li>
+              <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/dashboard">แดชบอร์ดผู้ดูแล</router-link></li>
+              <li><a @click="handleLogout" class="text-error">ออกจากระบบ</a></li>
             </ul>
           </div>
         </template>
         <template v-else>
-          <router-link to="/login" class="btn btn-primary btn-sm">Login</router-link>
-          <router-link to="/register" class="btn btn-outline btn-sm hidden sm:inline-flex">Register</router-link>
+          <router-link to="/login" class="btn btn-primary btn-sm">เข้าสู่ระบบ</router-link>
+          <router-link to="/register" class="btn btn-outline btn-sm hidden sm:inline-flex">สมัครสมาชิก</router-link>
         </template>
       </div>
     </div>
@@ -72,6 +72,17 @@ const router = useRouter();
 onMounted(() => {
   cartStore.loadFromStorage();
 });
+
+const translateRole = (role) => {
+  const roleMap = {
+    'admin': 'ผู้ดูแลระบบ',
+    'manager': 'ผู้จัดการ',
+    'customer': 'ลูกค้า',
+    'chef': 'เชฟ',
+    'staff': 'พนักงาน'
+  };
+  return roleMap[role.toLowerCase()] || role;
+};
 
 const handleLogout = () => {
   authStore.logout();

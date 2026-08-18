@@ -1,13 +1,13 @@
 <template>
   <div class="min-h-screen bg-base-200 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-4xl mx-auto">
-      <h1 class="text-3xl font-bold mb-8">Your Cart</h1>
+      <h1 class="text-3xl font-bold mb-8">ตะกร้าสินค้า</h1>
       
       <div v-if="cartStore.itemCount === 0" class="text-center py-20 bg-base-100 rounded-box shadow-sm">
         <div class="text-6xl mb-4">🛒</div>
-        <h2 class="text-2xl font-semibold mb-2">Your cart is empty</h2>
-        <p class="text-base-content/70 mb-6">Looks like you haven't added any dishes yet.</p>
-        <router-link to="/products" class="btn btn-primary">Browse Menu</router-link>
+        <h2 class="text-2xl font-semibold mb-2">ยังไม่มีสินค้าในตะกร้า</h2>
+        <p class="text-base-content/70 mb-6">คุณยังไม่ได้เพิ่มรายการอาหารที่ต้องการลงตะกร้าเลย</p>
+        <router-link to="/products" class="btn btn-primary">เลือกเมนูอาหาร</router-link>
       </div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -48,21 +48,21 @@
         <div class="lg:col-span-1">
           <div class="card bg-base-100 shadow-sm sticky top-24">
             <div class="card-body">
-              <h2 class="card-title mb-4">Order Summary</h2>
+              <h2 class="card-title mb-4">สรุปรายการสั่งอาหาร</h2>
               
               <div class="space-y-2 border-b border-base-200 pb-4 mb-4">
                 <div class="flex justify-between">
-                  <span class="text-base-content/70">Subtotal ({{cartStore.itemCount}} items)</span>
+                  <span class="text-base-content/70">ค่าอาหาร ({{cartStore.itemCount}} รายการ)</span>
                   <span>฿{{ Number(cartStore.totalPrice).toFixed(2) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-base-content/70">Tax (7%)</span>
+                  <span class="text-base-content/70">ภาษีมูลค่าเพิ่ม (7%)</span>
                   <span>฿{{ (Number(cartStore.totalPrice) * 0.07).toFixed(2) }}</span>
                 </div>
               </div>
               
               <div class="flex justify-between font-bold text-xl mb-6">
-                <span>Total</span>
+                <span>ยอดสุทธิ</span>
                 <span class="text-primary">฿{{ (Number(cartStore.totalPrice) * 1.07).toFixed(2) }}</span>
               </div>
               
@@ -72,7 +72,7 @@
                 :disabled="isProcessing"
               >
                 <span v-if="isProcessing" class="loading loading-spinner"></span>
-                {{ isProcessing ? 'Processing...' : 'Proceed to Checkout' }}
+                {{ isProcessing ? 'กำลังดำเนินการ...' : 'สั่งซื้ออาหาร' }}
               </button>
             </div>
           </div>
@@ -83,8 +83,8 @@
     <!-- QR Payment Modal -->
     <dialog id="qr_modal" class="modal">
       <div class="modal-box text-center">
-        <h3 class="font-bold text-lg mb-2">Scan to Pay</h3>
-        <p class="py-4 text-base-content/70">Scan the QR code below with your banking app to complete the payment for order <span class="font-bold text-base-content">{{ createdOrderCode }}</span></p>
+        <h3 class="font-bold text-lg mb-2">สแกนชำระเงิน</h3>
+        <p class="py-4 text-base-content/70">สแกน QR Code ด้านล่างด้วยแอปธนาคารของคุณ เพื่อทำธุรกรรมชำระเงินค่าอาหารสำหรับเลขที่สั่งซื้อ <span class="font-bold text-base-content">{{ createdOrderCode }}</span></p>
         
         <div class="flex justify-center my-6">
           <div class="bg-white p-4 rounded-xl border-4 border-primary inline-block">
@@ -96,8 +96,8 @@
         <p class="font-bold text-2xl text-primary mb-6">฿{{ (Number(cartStore.totalPrice) * 1.07).toFixed(2) }}</p>
         
         <div class="modal-action justify-center">
-          <button class="btn btn-primary" @click="confirmPayment">I have paid</button>
-          <button class="btn btn-ghost" @click="closeModal">Cancel Order</button>
+          <button class="btn btn-primary" @click="confirmPayment">ฉันชำระเงินเรียบร้อยแล้ว</button>
+          <button class="btn btn-ghost" @click="closeModal">ยกเลิกออเดอร์</button>
         </div>
       </div>
     </dialog>
@@ -147,7 +147,7 @@ const processCheckout = async () => {
     
   } catch (error) {
     console.error('Checkout failed:', error);
-    alert('Failed to process checkout. Are you logged in?');
+    alert('ไม่สามารถดำเนินคำสั่งซื้อได้ กรุณาลงชื่อเข้าใช้งานก่อน!');
   } finally {
     isProcessing.value = false;
   }
@@ -155,8 +155,6 @@ const processCheckout = async () => {
 
 const confirmPayment = async () => {
   try {
-    // In a real app, we might verify payment status here or the backend webhooks would do it.
-    // For demo, we just mark it as paid via API
     await api.post(`/payments/create`, {
         order_id: currentOrderId,
         amount: Number(cartStore.totalPrice) * 1.07,
@@ -172,7 +170,7 @@ const confirmPayment = async () => {
     router.push('/orders');
   } catch (error) {
     console.error('Payment confirmation failed:', error);
-    alert('Failed to confirm payment.');
+    alert('ไม่สามารถบันทึกยืนยันการชำระเงินได้');
   }
 };
 

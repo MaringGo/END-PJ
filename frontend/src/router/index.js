@@ -74,7 +74,15 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !token) {
     next('/login');
   } else if (to.meta.requiresRole) {
-    const userData = JSON.parse(user || '{}');
+    let userData = {};
+    try {
+      if (user && user !== 'undefined') {
+        userData = JSON.parse(user);
+      }
+    } catch (e) {
+      console.error('Failed to parse user from localStorage', e);
+    }
+    
     if (!to.meta.requiresRole.includes(userData.role)) {
       next('/');
     } else {
