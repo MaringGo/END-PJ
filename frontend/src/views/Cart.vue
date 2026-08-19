@@ -84,7 +84,7 @@
         
         <div class="flex justify-center my-6">
           <div class="bg-white p-4 rounded-xl border-4 border-primary inline-block">
-            <img :src="qrPayload ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}` : 'https://placehold.co/200x200?text=Loading...'" alt="QR Code" class="w-48 h-48" />
+            <img src="/qr-payment.png" alt="QR Code" class="w-48 object-contain" />
           </div>
         </div>
         

@@ -8,8 +8,23 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const query = `
-      SELECT o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
+      SELECT 
+        o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', oi.id,
+              'product_id', oi.product_id,
+              'quantity', oi.quantity,
+              'price', oi.price,
+              'product_name', p.name
+            )
+          ) FILTER (WHERE oi.id IS NOT NULL), '[]'
+        ) as items
       FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      LEFT JOIN products p ON oi.product_id = p.id
+      GROUP BY o.id
       ORDER BY o.created_at DESC
     `;
     const result = await pool.query(query);

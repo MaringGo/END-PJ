@@ -9,6 +9,8 @@ import Orders from '../views/Orders.vue';
 import Reports from '../views/Reports.vue';
 import Inventory from '../views/Inventory.vue';
 import Profile from '../views/Profile.vue';
+import Kitchen from '../views/Kitchen.vue';
+import MenuManager from '../views/MenuManager.vue';
 
 const routes = [
   {
@@ -60,10 +62,22 @@ const routes = [
     meta: { requiresAuth: true, requiresRole: ['admin', 'manager'] }
   },
   {
+    path: '/menu-manager',
+    name: 'MenuManager',
+    component: MenuManager,
+    meta: { requiresAuth: true, requiresRole: ['admin', 'manager'] }
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: Profile,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/kitchen',
+    name: 'Kitchen',
+    component: Kitchen,
+    meta: { requiresAuth: true, requiresRole: ['admin', 'manager', 'chef', 'staff'] }
   }
 ];
 

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -13,6 +14,25 @@ const pool = new pg.Pool({
 async function seed() {
   try {
     console.log('Seeding database...');
+    
+    // Create test users
+    const passwordHash = await bcrypt.hash('password123', 10);
+    const users = [
+      { username: 'admin', email: 'admin@test.com', role: 'admin' },
+      { username: 'manager', email: 'manager@test.com', role: 'manager' },
+      { username: 'chef', email: 'chef@test.com', role: 'chef' },
+      { username: 'staff', email: 'staff@test.com', role: 'staff' },
+      { username: 'customer', email: 'customer@test.com', role: 'customer' }
+    ];
+
+    for (const u of users) {
+      await pool.query(
+        `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password`,
+        [u.username, u.email, passwordHash, u.role]
+      );
+    }
+    console.log('Test users created.');
     
     // Add default categories
     const categoryQuery = `

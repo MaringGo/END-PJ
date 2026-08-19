@@ -52,7 +52,7 @@
 <script>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import axios from 'axios';
+import { useAuthStore } from '../stores/auth';
 
 export default {
   name: 'Login',
@@ -61,18 +61,19 @@ export default {
     const password = ref('');
     const error = ref('');
     const router = useRouter();
+    const authStore = useAuthStore();
 
     const handleLogin = async () => {
       try {
-        const response = await axios.post('/api/auth/login', {
-          email: email.value,
-          password: password.value
-        });
-
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-
-        router.push('/dashboard');
+        await authStore.login(email.value, password.value);
+        
+        if (authStore.isAdmin || authStore.isManager) {
+          router.push('/dashboard');
+        } else if (authStore.user?.role === 'chef' || authStore.user?.role === 'staff') {
+          router.push('/kitchen');
+        } else {
+          router.push('/products');
+        }
       } catch (err) {
         error.value = err.response?.data?.error || 'Login failed';
       }

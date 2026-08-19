@@ -21,6 +21,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get all categories
+router.get('/categories', async (req, res) => {
+  try {
+    const query = 'SELECT * FROM categories ORDER BY name';
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch categories', details: error.message });
+  }
+});
+
 // Get products by category
 router.get('/category/:category_id', async (req, res) => {
   const { category_id } = req.params;

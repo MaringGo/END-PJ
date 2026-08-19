@@ -21,9 +21,9 @@ export const useAuthStore = defineStore('auth', {
     isManager: (state) => state.user?.role === 'manager',
   },
   actions: {
-    async login(username, password) {
+    async login(email, password) {
       try {
-        const response = await api.post('/auth/login', { username, password });
+        const response = await api.post('/auth/login', { email, password });
         this.setAuthData(response.data);
         return true;
       } catch (error) {
