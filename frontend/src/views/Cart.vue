@@ -55,15 +55,11 @@
                   <span class="text-base-content/70">ค่าอาหาร ({{cartStore.itemCount}} รายการ)</span>
                   <span>฿{{ Number(cartStore.totalPrice).toFixed(2) }}</span>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-base-content/70">ภาษีมูลค่าเพิ่ม (7%)</span>
-                  <span>฿{{ (Number(cartStore.totalPrice) * 0.07).toFixed(2) }}</span>
-                </div>
               </div>
               
               <div class="flex justify-between font-bold text-xl mb-6">
                 <span>ยอดสุทธิ</span>
-                <span class="text-primary">฿{{ (Number(cartStore.totalPrice) * 1.07).toFixed(2) }}</span>
+                <span class="text-primary">฿{{ Number(cartStore.totalPrice).toFixed(2) }}</span>
               </div>
               
               <button 
@@ -88,12 +84,11 @@
         
         <div class="flex justify-center my-6">
           <div class="bg-white p-4 rounded-xl border-4 border-primary inline-block">
-            <!-- Simulated QR Code -->
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=restaurant-payment" alt="QR Code" class="w-48 h-48" />
+            <img :src="qrPayload ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}` : 'https://placehold.co/200x200?text=Loading...'" alt="QR Code" class="w-48 h-48" />
           </div>
         </div>
         
-        <p class="font-bold text-2xl text-primary mb-6">฿{{ (Number(cartStore.totalPrice) * 1.07).toFixed(2) }}</p>
+        <p class="font-bold text-2xl text-primary mb-6">฿{{ Number(cartStore.totalPrice).toFixed(2) }}</p>
         
         <div class="modal-action justify-center">
           <button class="btn btn-primary" @click="confirmPayment">ฉันชำระเงินเรียบร้อยแล้ว</button>
@@ -115,6 +110,7 @@ const router = useRouter();
 
 const isProcessing = ref(false);
 const createdOrderCode = ref('');
+const qrPayload = ref('');
 let currentOrderId = null;
 
 const updateQuantity = (id, newQuantity) => {
@@ -136,18 +132,22 @@ const processCheckout = async () => {
 
     const response = await api.post('/orders', {
       items: orderItems,
-      total_price: Number(cartStore.totalPrice) * 1.07 // including tax
+      total_price: Number(cartStore.totalPrice)
     });
 
-    currentOrderId = response.data.id;
-    createdOrderCode.value = response.data.order_code;
+    currentOrderId = response.data.order.id;
+    createdOrderCode.value = response.data.order.order_code;
+    
+    // Generate real PromptPay payload
+    const paymentRes = await api.post(`/payments/create/${currentOrderId}`);
+    qrPayload.value = paymentRes.data.payment.qr_code;
     
     // Open QR Modal
     document.getElementById('qr_modal').showModal();
     
   } catch (error) {
     console.error('Checkout failed:', error);
-    alert('ไม่สามารถดำเนินคำสั่งซื้อได้ กรุณาลงชื่อเข้าใช้งานก่อน!');
+    alert('ไม่สามารถดำเนินคำสั่งซื้อได้ โปรดลองอีกครั้ง');
   } finally {
     isProcessing.value = false;
   }
@@ -155,11 +155,8 @@ const processCheckout = async () => {
 
 const confirmPayment = async () => {
   try {
-    await api.post(`/payments/create`, {
-        order_id: currentOrderId,
-        amount: Number(cartStore.totalPrice) * 1.07,
-        payment_method: 'promptpay',
-        payment_status: 'paid'
+    await api.put(`/payments/${currentOrderId}/verify`, {
+        payment_status: 'completed'
     });
     
     // Clear cart

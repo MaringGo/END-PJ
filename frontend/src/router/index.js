@@ -8,6 +8,7 @@ import Cart from '../views/Cart.vue';
 import Orders from '../views/Orders.vue';
 import Reports from '../views/Reports.vue';
 import Inventory from '../views/Inventory.vue';
+import Profile from '../views/Profile.vue';
 
 const routes = [
   {
@@ -39,14 +40,12 @@ const routes = [
   {
     path: '/cart',
     name: 'Cart',
-    component: Cart,
-    meta: { requiresAuth: true }
+    component: Cart
   },
   {
     path: '/orders',
     name: 'Orders',
-    component: Orders,
-    meta: { requiresAuth: true }
+    component: Orders
   },
   {
     path: '/reports',
@@ -59,6 +58,12 @@ const routes = [
     name: 'Inventory',
     component: Inventory,
     meta: { requiresAuth: true, requiresRole: ['admin', 'manager'] }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
+    meta: { requiresAuth: true }
   }
 ];
 

@@ -53,12 +53,45 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Get order by order_code (for guest tracking)
+router.get('/track/:orderCode', async (req, res) => {
+  const { orderCode } = req.params;
+  try {
+    const orderQuery = `
+      SELECT o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
+      FROM orders o
+      WHERE o.order_code = $1
+    `;
+    const orderResult = await pool.query(orderQuery, [orderCode]);
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const itemsQuery = `
+      SELECT oi.id, oi.product_id, oi.quantity, oi.price, p.name as product_name
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = $1
+    `;
+    const itemsResult = await pool.query(itemsQuery, [orderResult.rows[0].id]);
+
+    res.json({
+      ...orderResult.rows[0],
+      items: itemsResult.rows
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch order', details: error.message });
+  }
+});
+
 // Create order
 router.post('/', async (req, res) => {
   const { user_id, items } = req.body;
 
-  if (!user_id || !items || items.length === 0) {
-    return res.status(400).json({ error: 'User ID and items are required' });
+  if (!items || items.length === 0) {
+    return res.status(400).json({ error: 'Items are required' });
   }
 
   const client = await pool.connect();
@@ -88,7 +121,7 @@ router.post('/', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const orderResult = await client.query(orderQuery, [orderCode, user_id, totalPrice, 'pending', 'pending']);
+    const orderResult = await client.query(orderQuery, [orderCode, user_id || null, totalPrice, 'pending', 'pending']);
     const orderId = orderResult.rows[0].id;
 
     // Create order items and update stock

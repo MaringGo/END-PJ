@@ -8,26 +8,26 @@
         </router-link>
       </div>
       <div class="flex-none gap-2">
-        <template v-if="authStore.isAuthenticated">
-          <!-- Cart Button -->
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
-              <div class="indicator">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                <span class="badge badge-sm badge-primary indicator-item" v-if="cartStore.itemCount > 0">{{ cartStore.itemCount }}</span>
-              </div>
+        <!-- Cart Button (Always visible for all users, crucial for mobile) -->
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+            <div class="indicator">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              <span class="badge badge-sm badge-primary indicator-item" v-if="cartStore.itemCount > 0">{{ cartStore.itemCount }}</span>
             </div>
-            <div tabindex="0" class="mt-3 z-[1] card card-compact dropdown-content w-52 bg-base-100 shadow-xl">
-              <div class="card-body">
-                <span class="font-bold text-lg">{{ cartStore.itemCount }} รายการ</span>
-                <span class="text-info">รวม: ฿{{ cartStore.totalPrice.toFixed(2) }}</span>
-                <div class="card-actions">
-                  <router-link to="/cart" class="btn btn-primary btn-block">ดูตะกร้าสินค้า</router-link>
-                </div>
+          </div>
+          <div tabindex="0" class="mt-3 z-[1] card card-compact dropdown-content w-52 bg-base-100 shadow-xl">
+            <div class="card-body">
+              <span class="font-bold text-lg">{{ cartStore.itemCount }} รายการ</span>
+              <span class="text-info">รวม: ฿{{ cartStore.totalPrice.toFixed(2) }}</span>
+              <div class="card-actions">
+                <router-link to="/cart" class="btn btn-primary btn-block">ดูตะกร้าสินค้า</router-link>
               </div>
             </div>
           </div>
+        </div>
 
+        <template v-if="authStore.isAuthenticated">
           <!-- User Menu -->
           <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar placeholder">
@@ -39,6 +39,7 @@
               <li class="menu-title">
                 <span>{{ authStore.user?.username }} ({{ translateRole(authStore.user?.role) }})</span>
               </li>
+              <li><router-link to="/profile">โปรไฟล์ส่วนตัว</router-link></li>
               <li><router-link to="/orders">ประวัติการสั่งซื้อ</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/dashboard">แดชบอร์ดผู้ดูแล</router-link></li>
               <li><a @click="handleLogout" class="text-error">ออกจากระบบ</a></li>
@@ -74,6 +75,7 @@ onMounted(() => {
 });
 
 const translateRole = (role) => {
+  if (!role) return '';
   const roleMap = {
     'admin': 'ผู้ดูแลระบบ',
     'manager': 'ผู้จัดการ',

@@ -1,5 +1,6 @@
 import express from 'express';
 import { pool } from '../server.js';
+import generatePayload from 'promptpay-qr';
 
 const router = express.Router();
 
@@ -39,14 +40,16 @@ router.post('/create/:order_id', async (req, res) => {
     }
 
     const order = orderResult.rows[0];
-    const qrCode = `https://promptpay.io/0812345678/${order.total_price}`; // Mock QR code URL
+    const mobileNumber = '0812345678';
+    const amount = parseFloat(order.total_price);
+    const payload = generatePayload(mobileNumber, { amount });
 
     const paymentQuery = `
       INSERT INTO payments (order_id, payment_method, qr_code, amount, payment_status)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const paymentResult = await pool.query(paymentQuery, [order_id, 'qr', qrCode, order.total_price, 'pending']);
+    const paymentResult = await pool.query(paymentQuery, [order_id, 'promptpay', payload, amount, 'pending']);
 
     res.status(201).json({
       message: 'QR code generated successfully',

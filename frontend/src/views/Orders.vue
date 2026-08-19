@@ -3,6 +3,16 @@
     <div class="max-w-5xl mx-auto">
       <h1 class="text-3xl font-bold mb-8">ประวัติการสั่งซื้อ</h1>
       
+      <div v-if="!authStore.isAuthenticated" class="mb-8 p-6 bg-base-100 rounded-box shadow-sm flex flex-col md:flex-row gap-4 items-end">
+        <div class="form-control w-full md:w-auto md:flex-1">
+          <label class="label">
+            <span class="label-text font-bold">ค้นหาด้วยหมายเลขคำสั่งซื้อ (Order Code)</span>
+          </label>
+          <input type="text" v-model="searchQuery" placeholder="เช่น ORD-1724065600000" class="input input-bordered w-full" @keyup.enter="searchOrder" />
+        </div>
+        <button class="btn btn-primary w-full md:w-auto" @click="searchOrder" :disabled="!searchQuery">ติดตามสถานะ</button>
+      </div>
+
       <div v-if="loading" class="flex justify-center items-center py-20">
         <span class="loading loading-spinner loading-lg text-primary"></span>
       </div>
@@ -16,7 +26,8 @@
       <div v-else-if="orders.length === 0" class="text-center py-20 bg-base-100 rounded-box shadow-sm">
         <div class="text-6xl mb-4">🧾</div>
         <h2 class="text-2xl font-semibold mb-2">ไม่พบรายการสั่งซื้อ</h2>
-        <p class="text-base-content/70 mb-6">คุณยังไม่เคยสั่งซื้ออาหารในระบบมาก่อน</p>
+        <p class="text-base-content/70 mb-6" v-if="authStore.isAuthenticated">คุณยังไม่เคยสั่งซื้ออาหารในระบบมาก่อน</p>
+        <p class="text-base-content/70 mb-6" v-else>กรุณากรอกหมายเลขคำสั่งซื้อด้านบนเพื่อติดตามสถานะ</p>
         <router-link to="/products" class="btn btn-primary">เริ่มสั่งอาหารได้เลย</router-link>
       </div>
 
@@ -73,12 +84,16 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../api/axios';
+import { useAuthStore } from '../stores/auth';
 
+const authStore = useAuthStore();
 const orders = ref([]);
-const loading = ref(true);
+const loading = ref(false);
 const error = ref(null);
+const searchQuery = ref('');
 
 const fetchOrders = async () => {
+  if (!authStore.isAuthenticated) return;
   loading.value = true;
   error.value = null;
   try {
@@ -87,6 +102,21 @@ const fetchOrders = async () => {
   } catch (err) {
     console.error('Failed to fetch orders:', err);
     error.value = 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้ กรุณาลองใหม่อีกครั้ง';
+  } finally {
+    loading.value = false;
+  }
+};
+
+const searchOrder = async () => {
+  if (!searchQuery.value) return;
+  loading.value = true;
+  error.value = null;
+  try {
+    const res = await api.get(`/orders/track/${searchQuery.value}`);
+    orders.value = [res.data];
+  } catch (err) {
+    error.value = 'ไม่พบคำสั่งซื้อหมายเลขนี้';
+    orders.value = [];
   } finally {
     loading.value = false;
   }
