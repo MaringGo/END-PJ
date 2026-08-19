@@ -35,8 +35,8 @@ pool.on('error', (err) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/orders', authMiddleware, orderRoutes);
-app.use('/api/payments', authMiddleware, paymentRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/inventory', authMiddleware, inventoryRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 

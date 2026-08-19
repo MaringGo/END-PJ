@@ -92,9 +92,12 @@
         
         <div class="modal-action justify-center">
           <button class="btn btn-primary" @click="confirmPayment">ฉันชำระเงินเรียบร้อยแล้ว</button>
-          <button class="btn btn-ghost" @click="closeModal">ยกเลิกออเดอร์</button>
+          <button class="btn btn-ghost" @click="cancelOrder">ยกเลิกออเดอร์</button>
         </div>
       </div>
+      <form method="dialog" class="modal-backdrop" @click="cancelOrder">
+        <button>close</button>
+      </form>
     </dialog>
   </div>
 </template>
@@ -163,12 +166,34 @@ const confirmPayment = async () => {
     cartStore.clearCart();
     document.getElementById('qr_modal').close();
     
+    // Save order code to local storage for guest tracking
+    if (createdOrderCode.value) {
+      const guestOrders = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+      if (!guestOrders.includes(createdOrderCode.value)) {
+        guestOrders.push(createdOrderCode.value);
+        localStorage.setItem('guest_orders', JSON.stringify(guestOrders));
+      }
+    }
+    
     // Redirect to orders
     router.push('/orders');
   } catch (error) {
     console.error('Payment confirmation failed:', error);
     alert('ไม่สามารถบันทึกยืนยันการชำระเงินได้');
   }
+};
+
+const cancelOrder = async () => {
+  if (currentOrderId) {
+    try {
+      await api.put(`/orders/${currentOrderId}/status`, { status: 'cancelled' });
+    } catch (error) {
+      console.error('Failed to cancel order:', error);
+    }
+    currentOrderId = null;
+    createdOrderCode.value = '';
+  }
+  document.getElementById('qr_modal').close();
 };
 
 const closeModal = () => {

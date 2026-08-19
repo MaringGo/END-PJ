@@ -1,11 +1,11 @@
 import express from 'express';
 import { pool } from '../server.js';
-import { roleMiddleware } from '../middleware/auth.js';
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all orders
-router.get('/', async (req, res) => {
+// Get all orders (Requires authentication)
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const query = `
       SELECT 
@@ -35,8 +35,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get order by ID
-router.get('/:id', async (req, res) => {
+// Get order by ID (Requires authentication)
+router.get('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
     const orderQuery = `
@@ -183,8 +183,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update order status (Staff/Chef/Manager/Admin)
-router.put('/:id/status', async (req, res) => {
+// Update order status (Staff/Chef/Manager/Admin) (Requires authentication)
+router.put('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -193,17 +193,47 @@ router.put('/:id/status', async (req, res) => {
   }
 
   try {
-    const query = `
-      UPDATE orders
-      SET status = $2
-      WHERE id = $1
-      RETURNING *
-    `;
-    const result = await pool.query(query, [id, status]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Order not found' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Update order status
+      const query = `
+        UPDATE orders
+        SET status = $2
+        WHERE id = $1
+        RETURNING *
+      `;
+      const result = await client.query(query, [id, status]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // If cancelled, restore stock
+      if (status === 'cancelled') {
+        const itemsQuery = `SELECT product_id, quantity FROM order_items WHERE order_id = $1`;
+        const itemsResult = await client.query(itemsQuery, [id]);
+        
+        for (const item of itemsResult.rows) {
+          const updateStockQuery = `UPDATE products SET stock = stock + $1 WHERE id = $2`;
+          await client.query(updateStockQuery, [item.quantity, item.product_id]);
+          
+          const logQuery = `
+            INSERT INTO stock_logs (product_id, change_quantity, action, order_id)
+            VALUES ($1, $2, $3, $4)
+          `;
+          await client.query(logQuery, [item.product_id, item.quantity, 'order_cancelled', id]);
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-    res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update order', details: error.message });

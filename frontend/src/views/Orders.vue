@@ -93,17 +93,33 @@ const error = ref(null);
 const searchQuery = ref('');
 
 const fetchOrders = async () => {
-  if (!authStore.isAuthenticated) return;
-  loading.value = true;
-  error.value = null;
-  try {
-    const res = await api.get('/orders');
-    orders.value = res.data;
-  } catch (err) {
-    console.error('Failed to fetch orders:', err);
-    error.value = 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้ กรุณาลองใหม่อีกครั้ง';
-  } finally {
-    loading.value = false;
+  if (authStore.isAuthenticated) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const res = await api.get('/orders');
+      orders.value = res.data;
+    } catch (err) {
+      console.error('Failed to fetch orders:', err);
+      error.value = 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้ กรุณาลองใหม่อีกครั้ง';
+    } finally {
+      loading.value = false;
+    }
+  } else {
+    // Guest checkout: fetch orders stored in localStorage
+    const guestOrders = JSON.parse(localStorage.getItem('guest_orders') || '[]');
+    if (guestOrders.length > 0) {
+      loading.value = true;
+      try {
+        const fetchPromises = guestOrders.map(code => api.get(`/orders/track/${code}`).catch(() => null));
+        const responses = await Promise.all(fetchPromises);
+        orders.value = responses.map(res => res ? res.data : null).filter(Boolean).reverse();
+      } catch (err) {
+        console.error('Failed to fetch guest orders', err);
+      } finally {
+        loading.value = false;
+      }
+    }
   }
 };
 

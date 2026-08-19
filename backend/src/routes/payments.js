@@ -2,6 +2,8 @@ import express from 'express';
 import { pool } from '../server.js';
 import generatePayload from 'promptpay-qr';
 
+import { authMiddleware } from '../middleware/auth.js';
+
 const router = express.Router();
 
 // Get payment for order
@@ -123,8 +125,8 @@ router.put('/:order_id/verify', async (req, res) => {
   }
 });
 
-// Get payment history
-router.get('/history/all', async (req, res) => {
+// Get payment history (Requires authentication)
+router.get('/history/all', authMiddleware, async (req, res) => {
   try {
     const query = `
       SELECT id, order_id, amount, payment_method, status, created_at
