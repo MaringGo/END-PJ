@@ -106,9 +106,11 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useCartStore } from '../stores/cart';
+import { useAuthStore } from '../stores/auth';
 import api from '../api/axios';
 
 const cartStore = useCartStore();
+const authStore = useAuthStore();
 const router = useRouter();
 
 const isProcessing = ref(false);
@@ -134,6 +136,7 @@ const processCheckout = async () => {
     }));
 
     const response = await api.post('/orders', {
+      user_id: authStore.user?.id || null,
       items: orderItems,
       total_price: Number(cartStore.totalPrice)
     });

@@ -74,18 +74,18 @@ router.put('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
 
   try {
     // Get current inventory
-    const currentQuery = 'SELECT quantity FROM inventory WHERE id = $1';
+    const currentQuery = 'SELECT quantity, low_stock_threshold, unit FROM inventory WHERE id = $1';
     const currentResult = await pool.query(currentQuery, [id]);
 
     if (currentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Inventory item not found' });
     }
 
-    const currentQuantity = currentResult.rows[0].quantity;
-    const quantityChange = quantity - currentQuantity;
-
-    const newThreshold = low_stock_threshold !== undefined ? low_stock_threshold : 'low_stock_threshold';
-    const status = quantity <= (low_stock_threshold || 5) ? 'low_stock' : 'ok';
+    const currentItem = currentResult.rows[0];
+    const newQuantity = quantity !== undefined ? quantity : currentItem.quantity;
+    const quantityChange = newQuantity - currentItem.quantity;
+    const effectiveThreshold = low_stock_threshold !== undefined ? low_stock_threshold : currentItem.low_stock_threshold;
+    const status = newQuantity <= effectiveThreshold ? 'low_stock' : 'ok';
 
     const query = `
       UPDATE inventory
@@ -96,7 +96,7 @@ router.put('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
       WHERE id = $1
       RETURNING *
     `;
-    const result = await pool.query(query, [id, quantity, unit, low_stock_threshold, status]);
+    const result = await pool.query(query, [id, newQuantity, unit ?? null, low_stock_threshold ?? null, status]);
 
     // Log stock change
     if (quantityChange !== 0) {

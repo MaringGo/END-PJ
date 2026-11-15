@@ -1,4 +1,5 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { pool } from '../server.js';
 import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
@@ -7,6 +8,10 @@ const router = express.Router();
 // Get all orders (Requires authentication)
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    const isCustomer = req.user.role === 'customer';
+    const whereClause = isCustomer ? 'WHERE o.user_id = $1' : '';
+    const params = isCustomer ? [req.user.id] : [];
+
     const query = `
       SELECT 
         o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at,
@@ -24,10 +29,11 @@ router.get('/', authMiddleware, async (req, res) => {
       FROM orders o
       LEFT JOIN order_items oi ON o.id = oi.order_id
       LEFT JOIN products p ON oi.product_id = p.id
+      ${whereClause}
       GROUP BY o.id
       ORDER BY o.created_at DESC
     `;
-    const result = await pool.query(query);
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -39,12 +45,17 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
-    const orderQuery = `
+    let orderQuery = `
       SELECT o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
       FROM orders o
       WHERE o.id = $1
     `;
-    const orderResult = await pool.query(orderQuery, [id]);
+    const params = [id];
+    if (req.user.role === 'customer') {
+      orderQuery += ' AND o.user_id = $2';
+      params.push(req.user.id);
+    }
+    const orderResult = await pool.query(orderQuery, params);
 
     if (orderResult.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found' });
@@ -103,7 +114,18 @@ router.get('/track/:orderCode', async (req, res) => {
 
 // Create order
 router.post('/', async (req, res) => {
-  const { user_id, items } = req.body;
+  let { user_id, items } = req.body;
+
+  // If token is provided, extract user_id if not present
+  if (!user_id && req.headers.authorization) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
+      user_id = decoded.id;
+    } catch (e) {
+      // Continue as guest
+    }
+  }
 
   if (!items || items.length === 0) {
     return res.status(400).json({ error: 'Items are required' });

@@ -43,6 +43,7 @@
               <li><router-link to="/orders">ประวัติการสั่งซื้อ</router-link></li>
               <li v-if="['admin', 'manager', 'chef', 'staff'].includes(authStore.user?.role)"><router-link to="/kitchen">ระบบห้องครัว</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/dashboard">แดชบอร์ดผู้ดูแล</router-link></li>
+              <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/reports">รายงานและสถิติ</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/menu-manager">จัดการเมนูอาหาร</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/inventory">จัดการคลังสินค้า</router-link></li>
               <li><a @click="handleLogout" class="text-error">ออกจากระบบ</a></li>
