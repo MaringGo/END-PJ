@@ -15,6 +15,7 @@ import inventoryRoutes from './src/routes/inventory.js';
 import reportRoutes from './src/routes/reports.js';
 import { authMiddleware } from './src/middleware/auth.js';
 import { initializeDatabase } from './src/database/init.js';
+import { seedDatabase } from './seed.js';
 
 const app = express();
 app.use(cors());
@@ -33,6 +34,7 @@ const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 async function runTests() {
   await initializeDatabase();
+  await seedDatabase(pool);
   const server = app.listen(TEST_PORT);
   console.log(`Test server running on ${BASE_URL}`);
 

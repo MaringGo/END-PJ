@@ -1,9 +1,10 @@
 import pg from 'pg';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 dotenv.config();
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
   database: process.env.DB_NAME || 'restaurant_db',
@@ -11,7 +12,7 @@ const pool = new pg.Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-async function seed() {
+export async function seedDatabase(dbPool = pool) {
   try {
     console.log('Seeding database...');
     
@@ -26,7 +27,7 @@ async function seed() {
     ];
 
     for (const u of users) {
-      await pool.query(
+      await dbPool.query(
         `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)
          ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password`,
         [u.username, u.email, passwordHash, u.role]
@@ -35,7 +36,7 @@ async function seed() {
     console.log('Test users created.');
     
     // Check and add categories
-    const existingCats = await pool.query('SELECT id, name FROM categories');
+    const existingCats = await dbPool.query('SELECT id, name FROM categories');
     const catMap = {};
     if (existingCats.rows.length === 0) {
       const categoryQuery = `
@@ -47,14 +48,14 @@ async function seed() {
           ('ของหวาน', 'ของหวานหลังมื้ออาหาร')
         RETURNING id, name;
       `;
-      const catRes = await pool.query(categoryQuery);
+      const catRes = await dbPool.query(categoryQuery);
       catRes.rows.forEach(c => { catMap[c.name] = c.id; });
     } else {
       existingCats.rows.forEach(c => { catMap[c.name] = c.id; });
     }
 
     // Check and add products
-    const existingProducts = await pool.query('SELECT id, name FROM products');
+    const existingProducts = await dbPool.query('SELECT id, name FROM products');
     const prodMap = {};
     if (existingProducts.rows.length === 0) {
       const productQuery = `
@@ -69,7 +70,7 @@ async function seed() {
           ('ข้าวเหนียวมะม่วง', 'ข้าวเหนียวมูนกะทิ เสิร์ฟพร้อมมะม่วงน้ำดอกไม้', 80.00, 100, $4)
         RETURNING id, name;
       `;
-      const prodRes = await pool.query(productQuery, [
+      const prodRes = await dbPool.query(productQuery, [
         catMap['อาหารจานเดียว'], 
         catMap['กับข้าว'], 
         catMap['เครื่องดื่ม'], 
@@ -81,7 +82,7 @@ async function seed() {
     }
 
     // Check and add raw materials into inventory (สต็อกวัตถุดิบ)
-    const existingInv = await pool.query('SELECT id, name FROM inventory');
+    const existingInv = await dbPool.query('SELECT id, name FROM inventory');
     const invMap = {};
     if (existingInv.rows.length === 0) {
       const rawMaterials = [
@@ -102,7 +103,7 @@ async function seed() {
       ];
 
       for (const m of rawMaterials) {
-        const res = await pool.query(
+        const res = await dbPool.query(
           `INSERT INTO inventory (name, quantity, unit, low_stock_threshold, status)
            VALUES ($1, $2, $3, $4, $5) RETURNING id, name`,
           [m.name, m.quantity, m.unit, m.threshold, m.status]
@@ -115,7 +116,7 @@ async function seed() {
     }
 
     // Seed product_ingredients (สูตรอาหารเชื่อมโยงวัตถุดิบ)
-    const existingIngs = await pool.query('SELECT id FROM product_ingredients LIMIT 1');
+    const existingIngs = await dbPool.query('SELECT id FROM product_ingredients LIMIT 1');
     if (existingIngs.rows.length === 0 && Object.keys(invMap).length > 0) {
       const recipes = [
         // ข้าวกะเพราหมูสับไข่ดาว
@@ -147,7 +148,7 @@ async function seed() {
 
       for (const r of recipes) {
         if (prodMap[r.prod] && invMap[r.inv]) {
-          await pool.query(
+          await dbPool.query(
             `INSERT INTO product_ingredients (product_id, inventory_id, quantity_used)
              VALUES ($1, $2, $3)`,
             [prodMap[r.prod], invMap[r.inv], r.qty]
@@ -158,11 +159,17 @@ async function seed() {
     }
 
     console.log('Seeding completed successfully!');
-    process.exit(0);
+    return true;
   } catch (err) {
     console.error('Failed to seed:', err);
-    process.exit(1);
+    throw err;
   }
 }
 
-seed();
+// If run directly: node seed.js
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  seedDatabase()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}

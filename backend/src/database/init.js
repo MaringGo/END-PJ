@@ -175,6 +175,18 @@ export const initializeDatabase = async () => {
     `);
 
     console.log('✅ Database tables initialized successfully');
+
+    // Auto-seed initial data if users table is empty
+    try {
+      const userCountRes = await pool.query('SELECT COUNT(*) FROM users');
+      if (parseInt(userCountRes.rows[0].count, 10) === 0) {
+        console.log('🌱 Database is empty. Auto-seeding initial users, products, and raw materials...');
+        const { seedDatabase } = await import('../../seed.js');
+        await seedDatabase(pool);
+      }
+    } catch (seedErr) {
+      console.warn('⚠️ Auto-seed check warning:', seedErr.message);
+    }
   } catch (error) {
     console.error('❌ Database initialization error:', error);
     throw error;
