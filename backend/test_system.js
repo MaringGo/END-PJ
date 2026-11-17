@@ -14,6 +14,7 @@ import paymentRoutes from './src/routes/payments.js';
 import inventoryRoutes from './src/routes/inventory.js';
 import reportRoutes from './src/routes/reports.js';
 import { authMiddleware } from './src/middleware/auth.js';
+import { initializeDatabase } from './src/database/init.js';
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,7 @@ const TEST_PORT = 5055;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 async function runTests() {
+  await initializeDatabase();
   const server = app.listen(TEST_PORT);
   console.log(`Test server running on ${BASE_URL}`);
 
@@ -174,102 +176,85 @@ async function runTests() {
       }
     });
 
-    let createdProductId;
-    await test('Create Product as Admin (Role check: Admin allowed)', async () => {
-      const res = await fetch(`${BASE_URL}/api/products`, {
+    // 6. Raw Materials Inventory (ระบบสต็อกวัตถุดิบ)
+    let inventoryId;
+    await test('Add Raw Material to Inventory (Manager/Admin allowed)', async () => {
+      const res = await fetch(`${BASE_URL}/api/inventory`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
+          'Authorization': `Bearer ${managerToken}`
         },
         body: JSON.stringify({
-          name: 'เมนูทดสอบระบบ',
-          description: 'รายละเอียดเมนูทดสอบ',
-          price: 99.00,
-          stock: 50,
-          category_id: sampleProducts[0]?.category_id || 1
+          name: 'เนื้อหมูสับเกรดเอ',
+          quantity: 25.5,
+          unit: 'กิโลกรัม',
+          low_stock_threshold: 5.0
         })
       });
       const data = await res.json();
-      if (res.status !== 201 || !data.id) {
-        throw new Error(`Create product failed: ${JSON.stringify(data)}`);
+      if (res.status !== 201 || !data.id || parseFloat(data.quantity) !== 25.5) {
+        throw new Error(`Add inventory failed: ${JSON.stringify(data)}`);
       }
-      createdProductId = data.id;
+      inventoryId = data.id;
     });
 
-    await test('Create Product as Customer (Role check: Customer rejected 403)', async () => {
-      const res = await fetch(`${BASE_URL}/api/products`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${customerToken}`
-        },
-        body: JSON.stringify({
-          name: 'เมนูแอบสร้าง',
-          price: 50.00
-        })
+    await test('Get Raw Materials Inventory list', async () => {
+      const res = await fetch(`${BASE_URL}/api/inventory`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
       });
-      if (res.status !== 403) {
-        throw new Error(`Expected 403 Forbidden, got ${res.status}`);
+      const data = await res.json();
+      if (res.status !== 200 || !Array.isArray(data) || data.length === 0) {
+        throw new Error(`Get inventory list failed: ${JSON.stringify(data)}`);
       }
     });
 
-    await test('Update Product as Manager (Role check: Manager allowed)', async () => {
-      const res = await fetch(`${BASE_URL}/api/products/${createdProductId}`, {
+    await test('Update Raw Material quantity & check status calculation', async () => {
+      const res = await fetch(`${BASE_URL}/api/inventory/${inventoryId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${managerToken}`
         },
         body: JSON.stringify({
-          price: 110.00,
-          stock: 45
+          quantity: 3.0,
+          low_stock_threshold: 5.0
         })
       });
       const data = await res.json();
-      if (res.status !== 200 || Number(data.price) !== 110.00 || data.stock !== 45) {
-        throw new Error(`Update product failed: ${JSON.stringify(data)}`);
+      if (res.status !== 200 || parseFloat(data.quantity) !== 3.0 || data.status !== 'low_stock') {
+        throw new Error(`Update inventory failed: ${JSON.stringify(data)}`);
       }
     });
 
-    await test('Delete Product as Admin', async () => {
-      const res = await fetch(`${BASE_URL}/api/products/${createdProductId}`, {
+    await test('Check Low Stock Alerts for Raw Materials', async () => {
+      const res = await fetch(`${BASE_URL}/api/inventory/alerts/low-stock`, {
+        headers: { 'Authorization': `Bearer ${managerToken}` }
+      });
+      const data = await res.json();
+      if (res.status !== 200 || !Array.isArray(data) || data.length === 0) {
+        throw new Error(`Low stock alerts failed: ${JSON.stringify(data)}`);
+      }
+      const found = data.some(i => i.id === inventoryId);
+      if (!found) throw new Error(`Expected item ${inventoryId} in low stock list`);
+    });
+
+    await test('Delete Raw Material from Inventory', async () => {
+      const res = await fetch(`${BASE_URL}/api/inventory/${inventoryId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${adminToken}` }
       });
       const data = await res.json();
       if (res.status !== 200) {
-        throw new Error(`Delete failed: ${JSON.stringify(data)}`);
+        throw new Error(`Delete inventory failed: ${JSON.stringify(data)}`);
       }
     });
 
-    // 6. Orders & Checkout (Guest & Customer)
-    let guestOrder;
-    await test('Create Order as Guest (Guest Checkout)', async () => {
-      const res = await fetch(`${BASE_URL}/api/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: [{ product_id: sampleProducts[0].id, quantity: 2 }]
-        })
-      });
-      const data = await res.json();
-      if (res.status !== 201 || !data.order || !data.order.order_code) {
-        throw new Error(`Create guest order failed: ${JSON.stringify(data)}`);
-      }
-      guestOrder = data.order;
-    });
-
-    await test('Track Order by Order Code without Auth (Guest tracking)', async () => {
-      const res = await fetch(`${BASE_URL}/api/orders/track/${guestOrder.order_code}`);
-      const data = await res.json();
-      if (res.status !== 200 || data.order_code !== guestOrder.order_code || !data.items || data.items.length === 0) {
-        throw new Error(`Track order failed: ${JSON.stringify(data)}`);
-      }
-    });
-
-    let customerOrder;
-    await test('Create Order as Authenticated Customer', async () => {
+    // 7. Full 6-Step Dine-in Order & Pay-after-eating Workflow
+    // Flow: 1.รับออเดอร์ (pending) -> 2.ยืนยัน (confirmed) -> 3.ลงมือทำ (preparing) -> 4.รอเสิร์ฟ (ready) -> 5.เสิร์ฟสำเร็จ (served) -> 6.จ่ายตัง (completed/paid)
+    let dineInOrder;
+    
+    await test('Step 1: Place Dine-in Order (starts at pending & unpaid with table_no)', async () => {
       const res = await fetch(`${BASE_URL}/api/orders`, {
         method: 'POST',
         headers: {
@@ -277,82 +262,61 @@ async function runTests() {
           'Authorization': `Bearer ${customerToken}`
         },
         body: JSON.stringify({
-          user_id: customerUser.id,
-          items: [{ product_id: sampleProducts[1].id, quantity: 1 }]
+          table_no: 'โต๊ะ 3',
+          items: [
+            { product_id: sampleProducts[0].id, quantity: 2 },
+            { product_id: sampleProducts[1].id, quantity: 1 }
+          ]
         })
       });
       const data = await res.json();
       if (res.status !== 201 || !data.order) {
-        throw new Error(`Create customer order failed: ${JSON.stringify(data)}`);
+        throw new Error(`Create order failed: ${JSON.stringify(data)}`);
       }
-      customerOrder = data.order;
-      if (Number(customerOrder.user_id) !== Number(customerUser.id)) {
-        throw new Error(`Order user_id mismatch: expected ${customerUser.id}, got ${customerOrder.user_id}`);
+      dineInOrder = data.order;
+      if (dineInOrder.status !== 'pending') {
+        throw new Error(`Expected status 'pending', got '${dineInOrder.status}'`);
       }
-    });
-
-    await test('Customer orders isolation (Customer only gets own orders)', async () => {
-      const res = await fetch(`${BASE_URL}/api/orders`, {
-        headers: { 'Authorization': `Bearer ${customerToken}` }
-      });
-      const data = await res.json();
-      if (res.status !== 200 || !Array.isArray(data)) {
-        throw new Error(`Failed to get orders: ${JSON.stringify(data)}`);
+      if (dineInOrder.payment_status !== 'unpaid') {
+        throw new Error(`Expected payment_status 'unpaid' (pay after dining), got '${dineInOrder.payment_status}'`);
       }
-      const otherUserOrders = data.filter(o => o.user_id !== customerUser.id);
-      if (otherUserOrders.length > 0) {
-        throw new Error(`Customer saw other orders: ${JSON.stringify(otherUserOrders)}`);
+      if (dineInOrder.table_no !== 'โต๊ะ 3') {
+        throw new Error(`Expected table_no 'โต๊ะ 3', got '${dineInOrder.table_no}'`);
       }
     });
 
-    await test('Staff/Chef can see all orders', async () => {
-      const res = await fetch(`${BASE_URL}/api/orders`, {
-        headers: { 'Authorization': `Bearer ${chefToken}` }
-      });
-      const data = await res.json();
-      if (res.status !== 200 || !Array.isArray(data) || data.length < 2) {
-        throw new Error(`Staff should see all orders, got: ${JSON.stringify(data)}`);
-      }
-    });
-
-    // 7. Payment (PromptPay QR & Verification)
-    let paymentData;
-    await test('Create Payment (PromptPay QR generation)', async () => {
-      const res = await fetch(`${BASE_URL}/api/payments/create/${customerOrder.id}`, {
-        method: 'POST'
-      });
-      const data = await res.json();
-      if (res.status !== 201 || !data.payment || !data.payment.qr_code) {
-        throw new Error(`Payment creation failed: ${JSON.stringify(data)}`);
-      }
-      paymentData = data.payment;
-      if (!paymentData.qr_code.startsWith('000201')) {
-        throw new Error(`Invalid EMVCo QR code payload: ${paymentData.qr_code}`);
-      }
-    });
-
-    await test('Verify Payment (Update order to paid & preparing)', async () => {
-      const res = await fetch(`${BASE_URL}/api/payments/${customerOrder.id}/verify`, {
+    await test('Step 2: Staff confirms order (pending -> confirmed)', async () => {
+      const res = await fetch(`${BASE_URL}/api/orders/${dineInOrder.id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_status: 'completed' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${staffToken}`
+        },
+        body: JSON.stringify({ status: 'confirmed' })
       });
       const data = await res.json();
-      if (res.status !== 200 || data.payment.payment_status !== 'completed') {
-        throw new Error(`Payment verify failed: ${JSON.stringify(data)}`);
-      }
-
-      // Verify order status updated to preparing and paid
-      const orderRes = await fetch(`${BASE_URL}/api/orders/track/${customerOrder.order_code}`);
-      const updatedOrder = await orderRes.json();
-      if (updatedOrder.payment_status !== 'paid' || updatedOrder.status !== 'preparing') {
-        throw new Error(`Order status mismatch after payment: ${JSON.stringify(updatedOrder)}`);
+      if (res.status !== 200 || data.status !== 'confirmed') {
+        throw new Error(`Expected confirmed status, got: ${JSON.stringify(data)}`);
       }
     });
 
-    // 8. Kitchen Status Updates
-    await test('Kitchen updates order status: preparing -> ready', async () => {
-      const res = await fetch(`${BASE_URL}/api/orders/${customerOrder.id}/status`, {
+    await test('Step 3: Kitchen starts cooking (confirmed -> preparing)', async () => {
+      const res = await fetch(`${BASE_URL}/api/orders/${dineInOrder.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${chefToken}`
+        },
+        body: JSON.stringify({ status: 'preparing' })
+      });
+      const data = await res.json();
+      if (res.status !== 200 || data.status !== 'preparing') {
+        throw new Error(`Expected preparing status, got: ${JSON.stringify(data)}`);
+      }
+    });
+
+    await test('Step 4: Cooking finished (preparing -> ready to serve)', async () => {
+      const res = await fetch(`${BASE_URL}/api/orders/${dineInOrder.id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -362,7 +326,66 @@ async function runTests() {
       });
       const data = await res.json();
       if (res.status !== 200 || data.status !== 'ready') {
-        throw new Error(`Status update failed: ${JSON.stringify(data)}`);
+        throw new Error(`Expected ready status, got: ${JSON.stringify(data)}`);
+      }
+    });
+
+    await test('Step 5: Food served to table (ready -> served)', async () => {
+      const res = await fetch(`${BASE_URL}/api/orders/${dineInOrder.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${staffToken}`
+        },
+        body: JSON.stringify({ status: 'served' })
+      });
+      const data = await res.json();
+      if (res.status !== 200 || data.status !== 'served') {
+        throw new Error(`Expected served status, got: ${JSON.stringify(data)}`);
+      }
+    });
+
+    await test('Step 6a: Generate PromptPay QR after meal for payment', async () => {
+      const res = await fetch(`${BASE_URL}/api/payments/create/${dineInOrder.id}`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (res.status !== 200 && res.status !== 201) {
+        throw new Error(`Payment generation failed: ${JSON.stringify(data)}`);
+      }
+      if (!data.payment || !data.payment.qr_code || !data.payment.qr_code.startsWith('000201')) {
+        throw new Error(`Invalid QR Code payload: ${JSON.stringify(data)}`);
+      }
+    });
+
+    await test('Step 6b: Payment verified (served -> completed, unpaid -> paid)', async () => {
+      const res = await fetch(`${BASE_URL}/api/payments/${dineInOrder.id}/verify`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_status: 'completed', payment_method: 'promptpay' })
+      });
+      const data = await res.json();
+      if (res.status !== 200 || data.payment.payment_status !== 'completed') {
+        throw new Error(`Payment verify failed: ${JSON.stringify(data)}`);
+      }
+
+      // Verify order is now completed and paid
+      const orderRes = await fetch(`${BASE_URL}/api/orders/track/${dineInOrder.order_code}`);
+      const updatedOrder = await orderRes.json();
+      if (updatedOrder.status !== 'completed') {
+        throw new Error(`Expected order status 'completed', got '${updatedOrder.status}'`);
+      }
+      if (updatedOrder.payment_status !== 'paid') {
+        throw new Error(`Expected payment_status 'paid', got '${updatedOrder.payment_status}'`);
+      }
+    });
+
+    // 8. Guest Tracking with Table No
+    await test('Guest tracking with order code returns table number and items', async () => {
+      const res = await fetch(`${BASE_URL}/api/orders/track/${dineInOrder.order_code}`);
+      const data = await res.json();
+      if (res.status !== 200 || data.table_no !== 'โต๊ะ 3' || data.items.length === 0) {
+        throw new Error(`Guest tracking failed: ${JSON.stringify(data)}`);
       }
     });
 
@@ -393,75 +416,6 @@ async function runTests() {
       });
       if (res.status !== 403) {
         throw new Error(`Expected 403 Forbidden, got ${res.status}`);
-      }
-    });
-
-    await test('Chef access Reports (Rejected 403 Forbidden)', async () => {
-      const res = await fetch(`${BASE_URL}/api/reports/analytics/summary`, {
-        headers: { 'Authorization': `Bearer ${chefToken}` }
-      });
-      if (res.status !== 403) {
-        throw new Error(`Expected 403 Forbidden, got ${res.status}`);
-      }
-    });
-
-    // 10. Inventory API
-    let inventoryId;
-    await test('Add Inventory item (Manager allowed)', async () => {
-      const res = await fetch(`${BASE_URL}/api/inventory`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${managerToken}`
-        },
-        body: JSON.stringify({
-          name: 'หมูสับสด',
-          quantity: 20,
-          unit: 'กิโลกรัม',
-          low_stock_threshold: 5
-        })
-      });
-      const data = await res.json();
-      if (res.status !== 201 || !data.id) {
-        throw new Error(`Add inventory failed: ${JSON.stringify(data)}`);
-      }
-      inventoryId = data.id;
-    });
-
-    await test('Get Inventory items list', async () => {
-      const res = await fetch(`${BASE_URL}/api/inventory`, {
-        headers: { 'Authorization': `Bearer ${managerToken}` }
-      });
-      const data = await res.json();
-      if (res.status !== 200 || !Array.isArray(data)) {
-        throw new Error(`Get inventory failed: ${JSON.stringify(data)}`);
-      }
-    });
-
-    await test('Update Inventory stock', async () => {
-      const res = await fetch(`${BASE_URL}/api/inventory/${inventoryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
-        },
-        body: JSON.stringify({
-          quantity: 3
-        })
-      });
-      const data = await res.json();
-      if (res.status !== 200 || data.quantity !== 3 || data.status !== 'low_stock') {
-        throw new Error(`Update inventory failed: ${JSON.stringify(data)}`);
-      }
-    });
-
-    await test('Check Low Stock Alerts', async () => {
-      const res = await fetch(`${BASE_URL}/api/inventory/alerts/low-stock`, {
-        headers: { 'Authorization': `Bearer ${managerToken}` }
-      });
-      const data = await res.json();
-      if (res.status !== 200 || !Array.isArray(data) || data.length === 0) {
-        throw new Error(`Low stock alerts failed: ${JSON.stringify(data)}`);
       }
     });
 

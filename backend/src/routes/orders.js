@@ -14,7 +14,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
     const query = `
       SELECT 
-        o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at,
+        o.id, o.order_code, o.table_no, o.user_id, o.total_price, o.status, o.payment_status, o.created_at,
         COALESCE(
           json_agg(
             json_build_object(
@@ -46,7 +46,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
     let orderQuery = `
-      SELECT o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
+      SELECT o.id, o.order_code, o.table_no, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
       FROM orders o
       WHERE o.id = $1
     `;
@@ -84,7 +84,7 @@ router.get('/track/:orderCode', async (req, res) => {
   const { orderCode } = req.params;
   try {
     const orderQuery = `
-      SELECT o.id, o.order_code, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
+      SELECT o.id, o.order_code, o.table_no, o.user_id, o.total_price, o.status, o.payment_status, o.created_at
       FROM orders o
       WHERE o.order_code = $1
     `;
@@ -112,9 +112,9 @@ router.get('/track/:orderCode', async (req, res) => {
   }
 });
 
-// Create order
+// Create order (รองรับรับประทานที่ร้าน ชำระเงินหลังทานเสร็จ)
 router.post('/', async (req, res) => {
-  let { user_id, items } = req.body;
+  let { user_id, items, table_no } = req.body;
 
   // If token is provided, extract user_id if not present
   if (!user_id && req.headers.authorization) {
@@ -144,51 +144,72 @@ router.post('/', async (req, res) => {
     const productsResult = await client.query(productsQuery, [productIds]);
     const priceMap = {};
     productsResult.rows.forEach(p => {
-      priceMap[p.id] = p.price;
+      priceMap[p.id] = parseFloat(p.price);
     });
 
     items.forEach(item => {
-      totalPrice += priceMap[item.product_id] * item.quantity;
+      totalPrice += (priceMap[item.product_id] || 0) * item.quantity;
     });
 
-    // Create order
+    // Create order with initial status: 'pending' (รับออเดอร์) and payment_status: 'unpaid' (ชำระเงินหลังทานอาหารเสร็จ)
     const orderCode = `ORD-${Date.now()}`;
+    const assignedTable = (table_no || '1').toString().trim();
+    
     const orderQuery = `
-      INSERT INTO orders (order_code, user_id, total_price, status, payment_status)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO orders (order_code, table_no, user_id, total_price, status, payment_status)
+      VALUES ($1, $2, $3, $4, 'pending', 'unpaid')
       RETURNING *
     `;
-    const orderResult = await client.query(orderQuery, [orderCode, user_id || null, totalPrice, 'pending', 'pending']);
+    const orderResult = await client.query(orderQuery, [orderCode, assignedTable, user_id || null, totalPrice]);
     const orderId = orderResult.rows[0].id;
 
-    // Create order items and update stock
+    // Create order items
     for (const item of items) {
       const itemQuery = `
         INSERT INTO order_items (order_id, product_id, quantity, price)
         VALUES ($1, $2, $3, $4)
       `;
-      await client.query(itemQuery, [orderId, item.product_id, item.quantity, priceMap[item.product_id]]);
+      await client.query(itemQuery, [orderId, item.product_id, item.quantity, priceMap[item.product_id] || 0]);
 
-      // Decrease stock
-      const updateStockQuery = `
-        UPDATE products SET stock = stock - $1 WHERE id = $2
-      `;
-      await client.query(updateStockQuery, [item.quantity, item.product_id]);
+      // Deduct raw materials / ingredients if mapped in product_ingredients
+      try {
+        const ingQuery = `
+          SELECT inventory_id, quantity_used 
+          FROM product_ingredients 
+          WHERE product_id = $1
+        `;
+        const ingResult = await client.query(ingQuery, [item.product_id]);
+        
+        for (const ing of ingResult.rows) {
+          const totalUsed = parseFloat(ing.quantity_used) * item.quantity;
+          await client.query(`
+            UPDATE inventory 
+            SET quantity = GREATEST(0, quantity - $1),
+                status = CASE 
+                  WHEN quantity - $1 <= 0 THEN 'out_of_stock'
+                  WHEN quantity - $1 <= low_stock_threshold THEN 'low_stock'
+                  ELSE 'ok'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [totalUsed, ing.inventory_id]);
 
-      // Log stock change
-      const logQuery = `
-        INSERT INTO stock_logs (product_id, change_quantity, action, order_id)
-        VALUES ($1, $2, $3, $4)
-      `;
-      await client.query(logQuery, [item.product_id, -item.quantity, 'order_created', orderId]);
+          await client.query(`
+            INSERT INTO stock_logs (inventory_id, change_quantity, action, order_id)
+            VALUES ($1, $2, 'order_used', $3)
+          `, [ing.inventory_id, -totalUsed, orderId]);
+        }
+      } catch (err) {
+        console.warn('Note: No product_ingredients deducted or table not yet populated:', err.message);
+      }
     }
 
-    // Create order queue
+    // Create order queue for kitchen
     const queueQuery = `
       INSERT INTO order_queue (order_id, status)
-      VALUES ($1, $2)
+      VALUES ($1, 'pending')
     `;
-    await client.query(queueQuery, [orderId, 'pending']);
+    await client.query(queueQuery, [orderId]);
 
     await client.query('COMMIT');
 
@@ -205,13 +226,19 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update order status (Staff/Chef/Manager/Admin) (Requires authentication)
+// Update order status (Staff/Chef/Manager/Admin)
+// Flow: pending -> confirmed -> preparing -> ready -> served -> completed (or cancelled)
 router.put('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, payment_status } = req.body;
 
   if (!status) {
     return res.status(400).json({ error: 'Status is required' });
+  }
+
+  const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'served', 'completed', 'cancelled'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
   }
 
   try {
@@ -220,31 +247,69 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
       await client.query('BEGIN');
       
       // Update order status
-      const query = `
-        UPDATE orders
-        SET status = $2
-        WHERE id = $1
-        RETURNING *
-      `;
-      const result = await client.query(query, [id, status]);
+      let query;
+      let params;
+      if (payment_status) {
+        query = `
+          UPDATE orders
+          SET status = $2,
+              payment_status = $3,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          RETURNING *
+        `;
+        params = [id, status, payment_status];
+      } else {
+        query = `
+          UPDATE orders
+          SET status = $2,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          RETURNING *
+        `;
+        params = [id, status];
+      }
+      
+      const result = await client.query(query, params);
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Order not found' });
       }
 
-      // If cancelled, restore stock
+      // Update order_queue status as well
+      await client.query(`
+        UPDATE order_queue 
+        SET status = $2, updated_at = CURRENT_TIMESTAMP 
+        WHERE order_id = $1
+      `, [id, status]);
+
+      // If cancelled, restore ingredients
       if (status === 'cancelled') {
-        const itemsQuery = `SELECT product_id, quantity FROM order_items WHERE order_id = $1`;
-        const itemsResult = await client.query(itemsQuery, [id]);
+        const logsQuery = `
+          SELECT inventory_id, change_quantity 
+          FROM stock_logs 
+          WHERE order_id = $1 AND inventory_id IS NOT NULL AND action = 'order_used'
+        `;
+        const logsResult = await client.query(logsQuery, [id]);
         
-        for (const item of itemsResult.rows) {
-          const updateStockQuery = `UPDATE products SET stock = stock + $1 WHERE id = $2`;
-          await client.query(updateStockQuery, [item.quantity, item.product_id]);
-          
-          const logQuery = `
-            INSERT INTO stock_logs (product_id, change_quantity, action, order_id)
-            VALUES ($1, $2, $3, $4)
-          `;
-          await client.query(logQuery, [item.product_id, item.quantity, 'order_cancelled', id]);
+        for (const log of logsResult.rows) {
+          const restoreQty = Math.abs(parseFloat(log.change_quantity));
+          await client.query(`
+            UPDATE inventory 
+            SET quantity = quantity + $1,
+                status = CASE 
+                  WHEN quantity + $1 <= 0 THEN 'out_of_stock'
+                  WHEN quantity + $1 <= low_stock_threshold THEN 'low_stock'
+                  ELSE 'ok'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [restoreQty, log.inventory_id]);
+
+          await client.query(`
+            INSERT INTO stock_logs (inventory_id, change_quantity, action, order_id)
+            VALUES ($1, $2, 'order_cancelled', $3)
+          `, [log.inventory_id, restoreQty, id]);
         }
       }
 

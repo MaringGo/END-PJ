@@ -45,7 +45,7 @@
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/dashboard">แดชบอร์ดผู้ดูแล</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/reports">รายงานและสถิติ</router-link></li>
               <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/menu-manager">จัดการเมนูอาหาร</router-link></li>
-              <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/inventory">จัดการคลังสินค้า</router-link></li>
+              <li v-if="authStore.isAdmin || authStore.isManager"><router-link to="/inventory">จัดการคลังวัตถุดิบ</router-link></li>
               <li><a @click="handleLogout" class="text-error">ออกจากระบบ</a></li>
             </ul>
           </div>

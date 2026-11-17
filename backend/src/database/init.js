@@ -32,24 +32,35 @@ export const initializeDatabase = async () => {
         name VARCHAR(255) NOT NULL,
         description TEXT,
         price DECIMAL(10, 2) NOT NULL,
-        stock INT DEFAULT 0,
+        stock INT DEFAULT 100,
         category_id INT REFERENCES categories(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Create inventory table
+    // Create inventory table (วัตถุดิบในคลัง)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS inventory (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        quantity INT NOT NULL,
-        unit VARCHAR(50),
-        low_stock_threshold INT DEFAULT 5,
+        quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        unit VARCHAR(50) NOT NULL,
+        low_stock_threshold DECIMAL(10, 2) DEFAULT 5,
         status VARCHAR(50) DEFAULT 'ok',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create product_ingredients table (สูตรอาหาร: เมนูนี้ใช้วัตถุดิบอะไรบ้าง)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS product_ingredients (
+        id SERIAL PRIMARY KEY,
+        product_id INT REFERENCES products(id) ON DELETE CASCADE,
+        inventory_id INT REFERENCES inventory(id) ON DELETE CASCADE,
+        quantity_used DECIMAL(10, 2) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -58,13 +69,35 @@ export const initializeDatabase = async () => {
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         order_code VARCHAR(255) UNIQUE NOT NULL,
+        table_no VARCHAR(50) DEFAULT '1',
         user_id INT REFERENCES users(id),
         total_price DECIMAL(10, 2) NOT NULL,
         status VARCHAR(50) DEFAULT 'pending',
-        payment_status VARCHAR(50) DEFAULT 'pending',
+        payment_status VARCHAR(50) DEFAULT 'unpaid',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Migration helper for existing orders table: ensure table_no exists
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='table_no') THEN
+          ALTER TABLE orders ADD COLUMN table_no VARCHAR(50) DEFAULT '1';
+        END IF;
+      END $$;
+    `);
+
+    // Migration helper for inventory table: ensure numeric types
+    await pool.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE inventory ALTER COLUMN quantity TYPE DECIMAL(10, 2);
+        ALTER TABLE inventory ALTER COLUMN low_stock_threshold TYPE DECIMAL(10, 2);
+      EXCEPTION WHEN OTHERS THEN
+        NULL;
+      END $$;
     `);
 
     // Create order_items table
@@ -120,10 +153,11 @@ export const initializeDatabase = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS stock_logs (
         id SERIAL PRIMARY KEY,
-        product_id INT REFERENCES products(id),
-        change_quantity INT NOT NULL,
+        inventory_id INT REFERENCES inventory(id) ON DELETE SET NULL,
+        product_id INT REFERENCES products(id) ON DELETE SET NULL,
+        change_quantity DECIMAL(10, 2) NOT NULL,
         action VARCHAR(50),
-        order_id INT REFERENCES orders(id),
+        order_id INT REFERENCES orders(id) ON DELETE SET NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);

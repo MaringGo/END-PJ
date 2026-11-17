@@ -44,12 +44,40 @@
           </div>
         </div>
 
-        <!-- Order Summary -->
+        <!-- Order Summary & Dine-in Details -->
         <div class="lg:col-span-1">
-          <div class="card bg-base-100 shadow-sm sticky top-24">
+          <div class="card bg-base-100 shadow-sm sticky top-24 border border-base-200">
             <div class="card-body">
-              <h2 class="card-title mb-4">สรุปรายการสั่งอาหาร</h2>
+              <h2 class="card-title mb-4">ข้อมูลการสั่งอาหาร</h2>
               
+              <!-- Table Number Selection -->
+              <div class="form-control w-full mb-4">
+                <label class="label">
+                  <span class="label-text font-bold">หมายเลขโต๊ะของคุณ <span class="text-error">*</span></span>
+                </label>
+                <div class="flex gap-2">
+                  <select v-model="tableNo" class="select select-bordered w-full font-bold">
+                    <option value="โต๊ะ 1">โต๊ะ 1</option>
+                    <option value="โต๊ะ 2">โต๊ะ 2</option>
+                    <option value="โต๊ะ 3">โต๊ะ 3</option>
+                    <option value="โต๊ะ 4">โต๊ะ 4</option>
+                    <option value="โต๊ะ 5">โต๊ะ 5</option>
+                    <option value="โต๊ะ 6">โต๊ะ 6</option>
+                    <option value="โต๊ะ 7">โต๊ะ 7</option>
+                    <option value="โต๊ะ 8">โต๊ะ 8</option>
+                    <option value="โต๊ะ 9">โต๊ะ 9</option>
+                    <option value="โต๊ะ 10">โต๊ะ 10</option>
+                    <option value="กลับบ้าน">สั่งกลับบ้าน (Takeaway)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Dine-in Pay-after Note -->
+              <div class="alert alert-info py-2 px-3 text-xs mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span><strong>ชำระเงินหลังทานเสร็จ:</strong> ครัวจะปรุงและเสิร์ฟอาหารให้ก่อน เมื่อทานเสร็จแล้วจึงชำระเงินที่หน้าออเดอร์</span>
+              </div>
+
               <div class="space-y-2 border-b border-base-200 pb-4 mb-4">
                 <div class="flex justify-between">
                   <span class="text-base-content/70">ค่าอาหาร ({{cartStore.itemCount}} รายการ)</span>
@@ -63,12 +91,12 @@
               </div>
               
               <button 
-                class="btn btn-primary w-full shadow-md hover:shadow-lg"
+                class="btn btn-primary w-full shadow-md hover:shadow-lg text-base"
                 @click="processCheckout"
                 :disabled="isProcessing"
               >
                 <span v-if="isProcessing" class="loading loading-spinner"></span>
-                {{ isProcessing ? 'กำลังดำเนินการ...' : 'สั่งซื้ออาหาร' }}
+                {{ isProcessing ? 'กำลังส่งออเดอร์...' : 'ยืนยันสั่งอาหาร (ชำระเงินหลังทานเสร็จ)' }}
               </button>
             </div>
           </div>
@@ -76,26 +104,45 @@
       </div>
     </div>
 
-    <!-- QR Payment Modal -->
-    <dialog id="qr_modal" class="modal">
-      <div class="modal-box text-center">
-        <h3 class="font-bold text-lg mb-2">สแกนชำระเงิน</h3>
-        <p class="py-4 text-base-content/70">สแกน QR Code ด้านล่างด้วยแอปธนาคารของคุณ เพื่อทำธุรกรรมชำระเงินค่าอาหารสำหรับเลขที่สั่งซื้อ <span class="font-bold text-base-content">{{ createdOrderCode }}</span></p>
-        
-        <div class="flex justify-center my-6">
-          <div class="bg-white p-4 rounded-xl border-4 border-primary inline-block">
-            <img src="/qr-payment.png" alt="QR Code" class="w-48 object-contain" />
+    <!-- Order Confirmed Modal -->
+    <dialog id="order_success_modal" class="modal">
+      <div class="modal-box text-center max-w-md">
+        <div class="text-6xl mb-4">🎉</div>
+        <h3 class="font-bold text-2xl text-success mb-2">สั่งอาหารสำเร็จ!</h3>
+        <p class="text-base text-base-content/80 mb-4">
+          ออเดอร์ของคุณถูกส่งไปยังห้องครัวเรียบร้อยแล้ว
+        </p>
+
+        <div class="bg-base-200 p-4 rounded-xl text-left space-y-2 mb-6 text-sm">
+          <div class="flex justify-between">
+            <span class="text-base-content/70">เลขที่คำสั่งซื้อ:</span>
+            <span class="font-bold text-primary font-mono">{{ createdOrderCode }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/70">ที่นั่ง/โต๊ะ:</span>
+            <span class="font-bold">{{ tableNo }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/70">สถานะ:</span>
+            <span class="badge badge-warning font-semibold">รับออเดอร์แล้ว (รอยืนยัน)</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-base-content/70">การชำระเงิน:</span>
+            <span class="badge badge-outline">ชำระหลังรับประทานเสร็จ</span>
           </div>
         </div>
-        
-        <p class="font-bold text-2xl text-primary mb-6">฿{{ Number(cartStore.totalPrice).toFixed(2) }}</p>
-        
+
+        <p class="text-xs text-base-content/60 mb-6">
+          คุณสามารถติดตามขั้นตอนการทำอาหารและเรียกสแกนชำระเงินเมื่อทานเสร็จได้ที่หน้าประวัติคำสั่งซื้อ
+        </p>
+
         <div class="modal-action justify-center">
-          <button class="btn btn-primary" @click="confirmPayment">ฉันชำระเงินเรียบร้อยแล้ว</button>
-          <button class="btn btn-ghost" @click="cancelOrder">ยกเลิกออเดอร์</button>
+          <button class="btn btn-primary w-full" @click="goToOrders">
+            ติดตามสถานะอาหาร
+          </button>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop" @click="cancelOrder">
+      <form method="dialog" class="modal-backdrop" @click="goToOrders">
         <button>close</button>
       </form>
     </dialog>
@@ -113,10 +160,9 @@ const cartStore = useCartStore();
 const authStore = useAuthStore();
 const router = useRouter();
 
+const tableNo = ref('โต๊ะ 1');
 const isProcessing = ref(false);
 const createdOrderCode = ref('');
-const qrPayload = ref('');
-let currentOrderId = null;
 
 const updateQuantity = (id, newQuantity) => {
   cartStore.updateQuantity(id, newQuantity);
@@ -137,37 +183,12 @@ const processCheckout = async () => {
 
     const response = await api.post('/orders', {
       user_id: authStore.user?.id || null,
+      table_no: tableNo.value,
       items: orderItems,
       total_price: Number(cartStore.totalPrice)
     });
 
-    currentOrderId = response.data.order.id;
     createdOrderCode.value = response.data.order.order_code;
-    
-    // Generate real PromptPay payload
-    const paymentRes = await api.post(`/payments/create/${currentOrderId}`);
-    qrPayload.value = paymentRes.data.payment.qr_code;
-    
-    // Open QR Modal
-    document.getElementById('qr_modal').showModal();
-    
-  } catch (error) {
-    console.error('Checkout failed:', error);
-    alert('ไม่สามารถดำเนินคำสั่งซื้อได้ โปรดลองอีกครั้ง');
-  } finally {
-    isProcessing.value = false;
-  }
-};
-
-const confirmPayment = async () => {
-  try {
-    await api.put(`/payments/${currentOrderId}/verify`, {
-        payment_status: 'completed'
-    });
-    
-    // Clear cart
-    cartStore.clearCart();
-    document.getElementById('qr_modal').close();
     
     // Save order code to local storage for guest tracking
     if (createdOrderCode.value) {
@@ -177,29 +198,23 @@ const confirmPayment = async () => {
         localStorage.setItem('guest_orders', JSON.stringify(guestOrders));
       }
     }
-    
-    // Redirect to orders
-    router.push('/orders');
+
+    // Clear cart immediately
+    cartStore.clearCart();
+
+    // Show order success modal
+    document.getElementById('order_success_modal').showModal();
+
   } catch (error) {
-    console.error('Payment confirmation failed:', error);
-    alert('ไม่สามารถบันทึกยืนยันการชำระเงินได้');
+    console.error('Checkout failed:', error);
+    alert('ไม่สามารถดำเนินคำสั่งซื้อได้ โปรดลองอีกครั้ง');
+  } finally {
+    isProcessing.value = false;
   }
 };
 
-const cancelOrder = async () => {
-  if (currentOrderId) {
-    try {
-      await api.put(`/orders/${currentOrderId}/status`, { status: 'cancelled' });
-    } catch (error) {
-      console.error('Failed to cancel order:', error);
-    }
-    currentOrderId = null;
-    createdOrderCode.value = '';
-  }
-  document.getElementById('qr_modal').close();
-};
-
-const closeModal = () => {
-  document.getElementById('qr_modal').close();
+const goToOrders = () => {
+  document.getElementById('order_success_modal').close();
+  router.push('/orders');
 };
 </script>

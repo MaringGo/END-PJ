@@ -85,14 +85,12 @@
             
             <div class="flex items-center justify-between mt-4">
               <span class="text-xl font-extrabold text-primary">฿{{ Number(product.price).toFixed(2) }}</span>
-              <span v-if="product.stock <= 5 && product.stock > 0" class="text-xs text-warning font-semibold">เหลือเพียง {{product.stock}} จานสุดท้าย!</span>
-              <span v-else-if="product.stock <= 0" class="text-xs text-error font-semibold">สินค้าหมด</span>
+              <span class="badge badge-sm badge-ghost text-xs text-success font-semibold">✓ ปรุงสดใหม่</span>
             </div>
 
             <div class="card-actions justify-end mt-4">
               <button 
                 class="btn btn-primary w-full shadow-sm hover:shadow-md transition-shadow group-active:scale-95"
-                :disabled="product.stock <= 0"
                 @click="addToCart(product)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

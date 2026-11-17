@@ -4,19 +4,51 @@ import { roleMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Helper to determine status
+const calculateStatus = (quantity, threshold) => {
+  const q = parseFloat(quantity);
+  const t = parseFloat(threshold || 5);
+  if (q <= 0) return 'out_of_stock';
+  if (q <= t) return 'low_stock';
+  return 'ok';
+};
+
 // Get all inventory items
 router.get('/', async (req, res) => {
   try {
     const query = `
-      SELECT id, name, quantity, unit, low_stock_threshold, status
+      SELECT id, name, quantity, unit, low_stock_threshold, status, updated_at
       FROM inventory
-      ORDER BY name
+      ORDER BY 
+        CASE 
+          WHEN status = 'out_of_stock' THEN 1
+          WHEN status = 'low_stock' THEN 2
+          ELSE 3
+        END,
+        name ASC
     `;
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch inventory', details: error.message });
+  }
+});
+
+// Get low stock items
+router.get('/alerts/low-stock', async (req, res) => {
+  try {
+    const query = `
+      SELECT id, name, quantity, unit, low_stock_threshold, status
+      FROM inventory
+      WHERE status IN ('low_stock', 'out_of_stock') OR quantity <= low_stock_threshold
+      ORDER BY quantity ASC
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch low stock alerts', details: error.message });
   }
 });
 
@@ -40,27 +72,31 @@ router.get('/:id', async (req, res) => {
 router.post('/', roleMiddleware(['admin', 'manager']), async (req, res) => {
   const { name, quantity, unit, low_stock_threshold } = req.body;
 
-  if (!name || !quantity || !unit) {
+  if (!name || quantity === undefined || !unit) {
     return res.status(400).json({ error: 'Name, quantity, and unit are required' });
   }
 
   try {
+    const threshold = low_stock_threshold !== undefined ? parseFloat(low_stock_threshold) : 5;
+    const qty = parseFloat(quantity);
+    const status = calculateStatus(qty, threshold);
+
     const query = `
       INSERT INTO inventory (name, quantity, unit, low_stock_threshold, status)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const status = quantity <= low_stock_threshold ? 'low_stock' : 'ok';
-    const result = await pool.query(query, [name, quantity, unit, low_stock_threshold || 5, status]);
+    const result = await pool.query(query, [name.trim(), qty, unit.trim(), threshold, status]);
+    const newItem = result.rows[0];
 
     // Log stock addition
     const logQuery = `
-      INSERT INTO stock_logs (product_id, change_quantity, action)
-      VALUES (NULL, $1, 'inventory_added')
+      INSERT INTO stock_logs (inventory_id, change_quantity, action)
+      VALUES ($1, $2, 'inventory_added')
     `;
-    await pool.query(logQuery, [quantity]);
+    await pool.query(logQuery, [newItem.id, qty]);
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(newItem);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to add inventory', details: error.message });
@@ -70,11 +106,11 @@ router.post('/', roleMiddleware(['admin', 'manager']), async (req, res) => {
 // Update inventory (Manager/Admin only)
 router.put('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
   const { id } = req.params;
-  const { quantity, unit, low_stock_threshold } = req.body;
+  const { name, quantity, unit, low_stock_threshold } = req.body;
 
   try {
     // Get current inventory
-    const currentQuery = 'SELECT quantity, low_stock_threshold, unit FROM inventory WHERE id = $1';
+    const currentQuery = 'SELECT * FROM inventory WHERE id = $1';
     const currentResult = await pool.query(currentQuery, [id]);
 
     if (currentResult.rows.length === 0) {
@@ -82,29 +118,34 @@ router.put('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
     }
 
     const currentItem = currentResult.rows[0];
-    const newQuantity = quantity !== undefined ? quantity : currentItem.quantity;
-    const quantityChange = newQuantity - currentItem.quantity;
-    const effectiveThreshold = low_stock_threshold !== undefined ? low_stock_threshold : currentItem.low_stock_threshold;
-    const status = newQuantity <= effectiveThreshold ? 'low_stock' : 'ok';
+    const newName = name !== undefined && name.trim() ? name.trim() : currentItem.name;
+    const newQuantity = quantity !== undefined ? parseFloat(quantity) : parseFloat(currentItem.quantity);
+    const newUnit = unit !== undefined && unit.trim() ? unit.trim() : currentItem.unit;
+    const newThreshold = low_stock_threshold !== undefined ? parseFloat(low_stock_threshold) : parseFloat(currentItem.low_stock_threshold);
+    
+    const quantityChange = newQuantity - parseFloat(currentItem.quantity);
+    const status = calculateStatus(newQuantity, newThreshold);
 
     const query = `
       UPDATE inventory
-      SET quantity = $2,
-          unit = COALESCE($3, unit),
-          low_stock_threshold = COALESCE($4, low_stock_threshold),
-          status = $5
+      SET name = $2,
+          quantity = $3,
+          unit = $4,
+          low_stock_threshold = $5,
+          status = $6,
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = $1
       RETURNING *
     `;
-    const result = await pool.query(query, [id, newQuantity, unit ?? null, low_stock_threshold ?? null, status]);
+    const result = await pool.query(query, [id, newName, newQuantity, newUnit, newThreshold, status]);
 
     // Log stock change
     if (quantityChange !== 0) {
       const logQuery = `
-        INSERT INTO stock_logs (product_id, change_quantity, action)
-        VALUES (NULL, $1, 'inventory_adjusted')
+        INSERT INTO stock_logs (inventory_id, change_quantity, action)
+        VALUES ($1, $2, 'inventory_adjusted')
       `;
-      await pool.query(logQuery, [quantityChange]);
+      await pool.query(logQuery, [id, quantityChange]);
     }
 
     res.json(result.rows[0]);
@@ -114,20 +155,20 @@ router.put('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
   }
 });
 
-// Get low stock items
-router.get('/alerts/low-stock', async (req, res) => {
+// Delete inventory (Manager/Admin only)
+router.delete('/:id', roleMiddleware(['admin', 'manager']), async (req, res) => {
+  const { id } = req.params;
+
   try {
-    const query = `
-      SELECT id, name, quantity, unit, low_stock_threshold, status
-      FROM inventory
-      WHERE status = 'low_stock' OR quantity = 0
-      ORDER BY quantity ASC
-    `;
-    const result = await pool.query(query);
-    res.json(result.rows);
+    const query = 'DELETE FROM inventory WHERE id = $1 RETURNING id, name';
+    const result = await pool.query(query, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Inventory item not found' });
+    }
+    res.json({ message: 'Inventory item deleted successfully', deleted: result.rows[0] });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to fetch low stock alerts', details: error.message });
+    res.status(500).json({ error: 'Failed to delete inventory', details: error.message });
   }
 });
 
